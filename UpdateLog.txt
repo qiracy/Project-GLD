@@ -1,22 +1,7 @@
-V6.20
-Major Features:
-Switched from DX9 to DX11
-Instant game search (thanks to IGDB)
-New search filters (genre, theme, releases, ratings)
-Auto-extract/setup for 1click, FitGirl, Dodi, etc.
-Better achievement watcher ("Force GLD Watcher" option)
-Faster achievement loading & game info
-New shortcuts, store image button & power options
+V7.02
 
-Design Changes:
-Redesigned tabs (scripts, settings, themes, game page)
-Custom background images (Lake/Dawn/Flow themes)
-DPI scale on top bar
-Gaussian blur (Win11 only)
-
-Extras:
-50+ hidden app achievements
-Full joystick navigation support
-
-(gld may freeze while auto updating and its normal!!!)
-(gld pode congelar ao se auto atualizar, isso é normal!!!)
+Added option to show download speed in bits instead of bytes
+Show which parts are downloading at multi part download
+Show command line input only when game is installed
+Fix DPI Scaling at shutdown timer popup
+Fix lua cleanup

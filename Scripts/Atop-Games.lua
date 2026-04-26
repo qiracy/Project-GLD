@@ -1,255 +1,338 @@
-﻿local sourcelink = "https://hydralinks.cloud/sources/atop-games.json"
-local function endsWith(str, pattern)
-    return string.sub(str, -string.len(pattern)) == pattern
-end
+-- to view examples and lua params go in this github page: https://github.com/Y0URD34TH/Project-GLD/blob/main/LuaParams.md
+local VERSION = "1.2.0"
+local BASE_URL = "https://atopgames.com/"
+client.auto_script_update(
+    "https://raw.githubusercontent.com/Y0URD34TH/Project-GLD/refs/heads/main/Scripts/Atop-Games.lua",
+    VERSION)
 
-function replace_spaces(input, replacement)
-    return string.gsub(input, " ", replacement)
-end
-
-function replace_symbol(input, replacement)
-    input = string.gsub(input, "'", replacement)
-    return string.gsub(input, "’", replacement)
-end
-
-function replace_symbol2(input, replacement)
-    return string.gsub(input, ":", replacement)
-end
-
-local function substituteRomanNumerals(gameName)
-    local romans = {
-        [" i"] = " 1",
-        [" ii"] = " 2",
-        [" iii"] = " 3",
-        [" iv"] = " 4",
-        [" v"] = " 5",
-        [" vi"] = " 6",
-        [" vii"] = " 7",
-        [" viii"] = " 8",
-        [" ix"] = " 9",
-        [" x"] = " 10"
-    }
-
-    for numeral, substitution in pairs(romans) do
-        if endsWith(gameName, numeral) then
-            gameName = string.sub(gameName, 1, -string.len(numeral) - 1) .. substitution
+local function extractPageandTitle(html)
+    local posts = {}
+    
+    -- Parse HTML document
+    local doc = html.parse(html)
+    
+    -- Find all post title elements
+    local postTitles = doc:css('h2.post-title')
+    
+    for i = 1, #postTitles do
+        local h2 = postTitles[i]
+        -- Get the link inside the h2
+        local links = h2:children()
+        
+        for j = 1, #links do
+            local link = links[j]
+            if link:tag() == "a" then
+                local href = link:attr("href")
+                local title = link:text()
+                
+                if href and title then
+                    table.insert(posts, {
+                        href = href,
+                        title = title:gsub("^%s*(.-)%s*$", "%1") -- trim whitespace
+                    })
+                end
+            end
         end
     end
 
-    return gameName
+    return posts
 end
-local function substituteRomanNumeralsFromEntireString(gameName)
-    local romans = {
-        [" i([^a-zA-Z0-9])"] = " 1%1",
-        [" ii([^a-zA-Z0-9])"] = " 2%1",
-        [" iii([^a-zA-Z0-9])"] = " 3%1",
-        [" iv([^a-zA-Z0-9])"] = " 4%1",
-        [" v([^a-zA-Z0-9])"] = " 5%1",
-        [" vi([^a-zA-Z0-9])"] = " 6%1",
-        [" vii([^a-zA-Z0-9])"] = " 7%1",
-        [" viii([^a-zA-Z0-9])"] = " 8%1",
-        [" ix([^a-zA-Z0-9])"] = " 9%1",
-        [" x([^a-zA-Z0-9])"] = " 10%1"
-    }
 
-    for numeral, substitution in pairs(romans) do
-        gameName = gameName:gsub(numeral, substitution)
+local function extractGameDetailsRobust(html)
+    local details = {
+        size = "",
+        version = "",
+        release_group = "",
+        genre = "",
+        developer = "",
+        platform = "",
+        game_type = ""
+    }
+    
+    -- Parse HTML document
+    local doc = html.parse(html)
+    
+    -- Find all list items
+    local listItems = doc:css('li')
+    
+    for i = 1, #listItems do
+        local liText = listItems[i]:text()
+        
+        -- Extract Game Size
+        if liText:find("Game Size") then
+            local size = liText:match("Game Size%s*:?%s*(.+)")
+            if size then
+                details.size = size:gsub("^%s*(.-)%s*$", "%1")
+            end
+        end
+        
+        -- Extract Version
+        if liText:find("Version") then
+            local version = liText:match("Version%s*:?%s*(.+)")
+            if version then
+                details.version = version:gsub("^%s*(.-)%s*$", "%1")
+                -- Remove leading colon if present
+                details.version = details.version:gsub("^:%s*", "")
+            end
+        end
+        
+        -- Extract Released By
+        if liText:find("Released By") then
+            local release_group = liText:match("Released By%s*:?%s*(.+)")
+            if release_group then
+                details.release_group = release_group:gsub("^%s*(.-)%s*$", "%1")
+            end
+        end
+        
+        -- Extract Genre
+        if liText:find("Genre") then
+            local genre = liText:match("Genre%s*:?%s*(.+)")
+            if genre then
+                details.genre = genre:gsub("^%s*(.-)%s*$", "%1")
+            end
+        end
+        
+        -- Extract Developer
+        if liText:find("Developer") then
+            local developer = liText:match("Developer%s*:?%s*(.+)")
+            if developer then
+                details.developer = developer:gsub("^%s*(.-)%s*$", "%1")
+            end
+        end
+        
+        -- Extract Platform
+        if liText:find("Platform") then
+            local platform = liText:match("Platform%s*:?%s*(.+)")
+            if platform then
+                details.platform = platform:gsub("^%s*(.-)%s*$", "%1")
+            end
+        end
+        
+        -- Extract Game Type
+        if liText:find("Game Type") then
+            local game_type = liText:match("Game Type%s*:?%s*(.+)")
+            if game_type then
+                details.game_type = game_type:gsub("^%s*(.-)%s*$", "%1")
+            end
+        end
     end
 
-    -- Handle cases where Roman numerals are at the beginning or end of the string
-    gameName =substituteRomanNumerals(gameName)
-
-    return gameName
-end
-
-local function generateVariations(input)
-    local variations = {}
-
-    -- Original variations
-    table.insert(variations, input)
-    local lower_input = input:lower()
-    table.insert(variations, lower_input)
-    local lower_input_no_roman = substituteRomanNumeralsFromEntireString(lower_input)
-    table.insert(variations, lower_input_no_roman)
-    local lower_spaces_to_dot = replace_spaces(lower_input, ".")
-    table.insert(variations, lower_spaces_to_dot)
-    local lower_spaces_to_dot_no_roman = replace_spaces(lower_input_no_roman, ".")
-    table.insert(variations, lower_spaces_to_dot_no_roman)
-    local lower_spaces_to_dot1 = replace_symbol(lower_input, ".")
-    table.insert(variations, lower_spaces_to_dot1)
-    local lower_no_symbols = replace_symbol(lower_input, "")
-    table.insert(variations, lower_no_symbols)
-    local lower_no_symbols_no_roman = replace_symbol(lower_input_no_roman, "")
-    table.insert(variations, lower_no_symbols_no_roman)
-    local lower_no_symbols_spaces_to_dot = replace_spaces(lower_no_symbols, ".")
-    table.insert(variations, lower_no_symbols_spaces_to_dot)
-    local lower_no_symbols_spaces_to_dot_no_roman = replace_spaces(lower_no_symbols_no_roman, ".")
-    table.insert(variations, lower_no_symbols_spaces_to_dot_no_roman)
-    local lower_no_symbols2 = replace_symbol2(lower_input, "")
-    table.insert(variations, lower_no_symbols2)
-    local lower_no_symbols_no_roman2 = replace_symbol2(lower_input_no_roman, "")
-    table.insert(variations, lower_no_symbols_no_roman2)
-    local lower_no_symbols_spaces_to_dot2 = replace_spaces(lower_no_symbols2, ".")
-    table.insert(variations, lower_no_symbols_spaces_to_dot2)
-    local lower_no_symbols_spaces_to_dot_no_roman2 = replace_spaces(lower_no_symbols_no_roman2, ".")
-    table.insert(variations, lower_no_symbols_spaces_to_dot_no_roman2)
-
-    -- Additional variations combining existing ones
-    -- Combine lower_input_no_roman with lower_spaces_to_dot
-    local combined1 = replace_spaces(lower_input_no_roman, ".")
-    table.insert(variations, combined1)
-
-    -- Combine lower_no_symbols with lower_no_symbols_no_roman
-    local combined2 = replace_symbol(lower_no_symbols, "")
-    table.insert(variations, combined2)
-
-    -- Combine lower_no_symbols with replace_symbol2
-    local combined22 = replace_symbol2(lower_no_symbols, "")
-    table.insert(variations, combined22)
-
-    -- Combine lower_spaces_to_dot with lower_no_symbols_no_roman2
-    local combined3 = replace_spaces(lower_spaces_to_dot, "")
-    table.insert(variations, combined3)
-
-    -- Combine lower_no_symbols_spaces_to_dot with lower_no_symbols_spaces_to_dot_no_roman2
-    local combined4 = replace_spaces(lower_no_symbols_spaces_to_dot, "")
-    table.insert(variations, combined4)
-
-    -- Combine lower_no_symbols_no_roman with lower_no_symbols2
-    local combined5 = replace_symbol(lower_no_symbols_no_roman, "")
-    table.insert(variations, combined5)
-
-    -- Combine lower_no_symbols_no_roman with replace_symbol2
-    local combined52 = replace_symbol2(lower_no_symbols_no_roman, "")
-    table.insert(variations, combined52)
-
-    -- Combine lower_spaces_to_dot_no_roman with lower_no_symbols_spaces_to_dot2
-    local combined6 = replace_spaces(lower_spaces_to_dot_no_roman, "")
-    table.insert(variations, combined6)
-
-    -- Combine lower_no_symbols_spaces_to_dot_no_roman with lower_no_symbols_spaces_to_dot_no_roman2
-    local combined7 = replace_spaces(lower_no_symbols_spaces_to_dot_no_roman, "")
-    table.insert(variations, combined7)
-
-    -- Combine lower_no_symbols_spaces_to_dot_no_roman with lower_no_symbols_spaces_to_dot2
-    local combined8 = replace_spaces(lower_no_symbols_spaces_to_dot_no_roman, "")
-    table.insert(variations, combined8)
-
-    -- Combine lower_no_symbols_spaces_to_dot with lower_no_symbols_spaces_to_dot_no_roman2
-    local combined9 = replace_spaces(lower_no_symbols_spaces_to_dot, "")
-    table.insert(variations, combined9)
-
-    -- Combine lower_no_symbols_spaces_to_dot_no_roman with lower_no_symbols_no_roman2
-    local combined10 = replace_spaces(lower_no_symbols_spaces_to_dot_no_roman, "")
-    table.insert(variations, combined10)
-
-    -- Combine lower_no_symbols_no_roman with lower_no_symbols_spaces_to_dot2
-    local combined11 = replace_symbol(lower_no_symbols_no_roman, "")
-    table.insert(variations, combined11)
-
-    -- Combine lower_no_symbols_no_roman with replace_symbol2
-    local combined112 = replace_symbol2(lower_no_symbols_no_roman, "")
-    table.insert(variations, combined112)
-
-    -- Combine lower_no_symbols_spaces_to_dot with lower_no_symbols2
-    local combined12 = replace_spaces(lower_no_symbols_spaces_to_dot, "")
-    table.insert(variations, combined12)
-
-    -- Combine lower_no_symbols_no_roman2 with lower_no_symbols_spaces_to_dot_no_roman2
-    local combined13 = replace_spaces(lower_no_symbols_no_roman2, "")
-    table.insert(variations, combined13)
-
-    -- Combine lower_spaces_to_dot with lower_spaces_to_dot_no_roman
-    local combined14 = replace_spaces(lower_spaces_to_dot, ".")
-    table.insert(variations, combined14)
-
-    -- Combine lower_spaces_to_dot with lower_no_symbols_spaces_to_dot
-    local combined15 = replace_spaces(lower_spaces_to_dot, ".")
-    table.insert(variations, combined15)
-
-    -- Combine lower_spaces_to_dot with lower_no_symbols_spaces_to_dot_no_roman
-    local combined16 = replace_spaces(lower_spaces_to_dot, ".")
-    table.insert(variations, combined16)
-
-    -- Combine lower_spaces_to_dot_no_roman with lower_no_symbols_spaces_to_dot_no_roman
-    local combined17 = replace_spaces(lower_spaces_to_dot_no_roman, ".")
-    table.insert(variations, combined17)
-
-    -- Combine lower_spaces_to_dot_no_roman with lower_no_symbols_spaces_to_dot_no_roman2
-    local combined18 = replace_spaces(lower_spaces_to_dot_no_roman, ".")
-    table.insert(variations, combined18)
-
-    -- Combine lower_spaces_to_dot_no_roman with lower_no_symbols_spaces_to_dot
-    local combined19 = replace_spaces(lower_spaces_to_dot_no_roman, ".")
-    table.insert(variations, combined19)
-
-    return variations
+    return details
 end
 
 local function isFrom1Fichier(url)
     return url:find("1fichier") ~= nil
 end
 
-local function search_game(downloads, game_name, name_script)
-    local results = {}
-    local game_name_variations = generateVariations(game_name)
+local function isFrombuzz(url)
+    return url:find("buzzheavier") ~= nil
+end
 
-    for _, download in ipairs(downloads) do
-        local lower_title = download.title:lower()
-        local lower_title_variations = generateVariations(lower_title)
-        
-        local add_result = false
-        for _, game_variation in ipairs(game_name_variations) do
-            for _, title_variation in ipairs(lower_title_variations) do
-                if title_variation:find(game_variation, 1, true) then
-                    add_result = true
-                    break
-                end
-            end
-            if add_result then
-                break
-            end
-        end
-
-        if add_result then
-            local patchresult = {
-                name = "[" .. download.fileSize .. "] " .. download.title,
-                links = {},
-                tooltip = "Size: " .. download.fileSize .. " | Upload Date: " .. download.uploadDate,
-                ScriptName = name_script
-            }
-            for index, uri in ipairs(download.uris) do
-			    if not isFrom1Fichier(uri) then
-                   table.insert(patchresult.links, { name = "Download Option " .. tostring(index), link = uri, addtodownloadlist = true })  
-                end				
-            end
-            table.insert(results, patchresult)
-        end
+local function extractDomain(url)
+    -- Check if it's a magnet link
+    if url:match("^magnet:") then
+        return "Torrent"
     end
 
-    return results
+    -- Extract domain from URL
+    local domain = url:match("^https?://([^/]+)") or url:match("^//([^/]+)")
+    if domain then
+        -- Remove www. prefix if present
+        domain = domain:gsub("^www%.", "")
+    end
+    return domain or "Unknown"
 end
 
-local version = client.GetVersionDouble()
-
-if version < 2.14 then
-   Notifications.push_error("Lua Script", "Program is Outdated Please Update to use that Script")
-else
-local statebool = false
-
-local function requestfromsource()
-    local getgamename = game.getgamename()
-
+local function webScrapeAtop(gameName)
+    local searchUrl = "https://atopgames.com/?s=" .. gameName
+    searchUrl = searchUrl:gsub(" ", "+")
     local headers = {
-     ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        ["User-Agent"] =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
-    local response = http.get(sourcelink, headers)  -- Use the dynamic link here
-    local gameResults = JsonWrapper.parse(response)["downloads"]
-    local scriptname = JsonWrapper.parse(response)["name"]
+    local response = http.get(searchUrl, headers)
+    if not response then
+        return {}
+    end
+    
+    local all_pages = extractPageandTitle(response)
+    local result = {}
+    
+    for i, page in ipairs(all_pages) do
+        local pageUrl = page.href
+        
+        -- Ensure full URL
+        if not pageUrl:find("^https?://") then
+            pageUrl = BASE_URL .. pageUrl
+        end
+        
+        local pageResponse = http.get(pageUrl, headers)
+        if not pageResponse then
+            goto continue
+        end
+        
+        local details = extractGameDetailsRobust(pageResponse)
+        local gameResult = {
+            name       = "[" .. details.size .. "] " .. page.title,
+            links      = {},
+            tooltip    = "Size: " ..
+                details.size .. " | Version: " .. details.version .. " | Released By: " .. details.release_group,
+            ScriptName = "Atop-Games"
+        }
+        
+        -- Parse page for download links using HTML parser
+        local pageDoc = html.parse(pageResponse)
+        
+        -- Find all download buttons with class "shortc-button small blue"
+        local downloadButtons = pageDoc:css('a.shortc-button.small.blue')
+        
+        for j = 1, #downloadButtons do
+            local serverLink = downloadButtons[j]:attr("href")
+            
+            if serverLink then
+                -- Add protocol if missing
+                if serverLink:sub(1, 2) == "//" then
+                    serverLink = "https:" .. serverLink
+                elseif not serverLink:find("^https?://") then
+                    serverLink = "https:" .. serverLink
+                end
+                
+                local domain = extractDomain(serverLink)
+                
+                -- Skip 1fichier links
+                if not isFrom1Fichier(serverLink) then
+                    if isFrombuzz(serverLink) then
+                        -- Buzzheavier links need manual download
+                        table.insert(gameResult.links, {
+                            name = "Download in " .. domain,
+                            link = serverLink,
+                            addtodownloadlist = false
+                        })
+                    else
+                        -- Other links can auto-download
+                        table.insert(gameResult.links, {
+                            name = "Download in " .. domain,
+                            link = serverLink,
+                            addtodownloadlist = true
+                        })
+                    end
+                end
+            end
+        end
+        
+        -- Only add game result if it has download links
+        if #gameResult.links > 0 then
+            table.insert(result, gameResult)
+        end
+        
+        ::continue::
+    end
+    
+    return result
+end
 
-    local results = search_game(gameResults, getgamename, scriptname)
-
+local function atop()
+    local gamename = game.getgamename()
+    local results = webScrapeAtop(gamename)
     communication.receiveSearchResults(results)
 end
-client.add_callback("on_scriptselected", requestfromsource)  -- on a game is selected in menu callback
+
+local imagelink = ""
+local gamename = ""
+local expectedurl = ""
+local defaultdir = "C:/Games"
+
+local function ondownloadclick(gamejson, downloadurl, scriptname)
+    if scriptname == "Atop-Games" then
+        expectedurl = downloadurl
+    end
+    local jsonResults = JsonWrapper.parse(gamejson)
+    local coverImageUrl = jsonResults["cover"]["url"]
+
+    if coverImageUrl and coverImageUrl:sub(1, 2) == "//" then
+        coverImageUrl = "https:" .. coverImageUrl
+    end
+    if coverImageUrl then
+        coverImageUrl = coverImageUrl:gsub("t_thumb", "t_cover_big")
+    end
+
+    local jsonName = JsonWrapper.parse(gamejson).name
+    gamename = jsonName
+    imagelink = coverImageUrl
 end
+
+local pathcheck = ""
+
+local function ondownloadcompleted(path, url)
+    if expectedurl == url then
+        local gamenametopath = gamename
+        gamenametopath = gamenametopath:gsub(":", "")
+        defaultdir = menu.get_text("Atop Game Dir") .. "/" .. gamenametopath .. "/"
+        path = path:gsub("\\", "/")
+        pathcheck = path
+        zip.extract(path, defaultdir, false)
+    end
+    settings.save()
+end
+
+local function onextractioncompleted(origin, path)
+    if pathcheck == origin then
+        path = path:gsub("/", "\\")
+        local folders = file.listfolders(path)
+
+        local secondFolder = folders[1]
+        if secondFolder then
+            local fullFolderPath = path .. "\\" .. secondFolder
+            local executables = file.listexecutables(fullFolderPath)
+
+            -- Get the first executable
+            if executables and #executables >= 1 then
+                local firstExecutable = executables[1]
+                local fullExecutablePath = fullFolderPath .. "\\" .. firstExecutable
+                local gameidl = GameLibrary.GetGameIdFromName(gamename)
+                
+                if gameidl == -1 then
+                    local imagePath = Download.DownloadImage(imagelink)
+                    GameLibrary.addGame(fullExecutablePath, imagePath, gamename, "")
+                    Notifications.push_success("Atop Script", "Game Successfully Installed!")
+                else
+                    GameLibrary.changeGameinfo(gameidl, fullExecutablePath)
+                    Notifications.push_success("Atop Script", "Game Successfully Installed!")
+                end
+            else
+                -- Try recursive search
+                local executables2 = file.listexecutablesrecursive(fullFolderPath)
+                if executables2 and #executables2 >= 1 then
+                    local firstExecutable = executables2[1]
+                    local gameidl = GameLibrary.GetGameIdFromName(gamename)
+                    
+                    if gameidl == -1 then
+                        local imagePath = Download.DownloadImage(imagelink)
+                        GameLibrary.addGame(firstExecutable, imagePath, gamename, "")
+                        Notifications.push_success("Atop Script", "Game Successfully Installed!")
+                    else
+                        GameLibrary.changeGameinfo(gameidl, firstExecutable)
+                        Notifications.push_success("Atop Script", "Game Successfully Installed!")
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Initialize menu
+local version = client.GetVersionDouble()
+if version >= 6.95 then
+    Notifications.push_success("Lua Script", "Atop-Games Script Loaded and Working")
+    menu.add_input_text("Atop Game Dir")
+    menu.set_text("Atop Game Dir", defaultdir)
+    settings.load()
+    
+    client.add_callback("on_downloadclick", ondownloadclick)
+    client.add_callback("on_downloadcompleted", ondownloadcompleted)
+    client.add_callback("on_extractioncompleted", onextractioncompleted)
+    client.add_callback("on_scriptselected", atop)
+else
+    Notifications.push_error("Lua Script", "Program is Outdated. Please Update to use this Script")
+end
+
